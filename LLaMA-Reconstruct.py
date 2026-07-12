@@ -46,11 +46,27 @@ class SelfAttention(nn.Module):
 class FeedForward(nn.Module):
     def __init__(self, config: LLaMAConfig):
         super().__init__()
-        self.fc1 = nn.Linear(config.n_embd, config.n_embd * 4)
-        self.fc2 = nn.Linear(config.n_embd * 4, config.n_embd)
+        self.hidden_dim = int(2/3 * 4 * config.n_embd)
+        self.w1 = nn.Linear(config.n_embd, self.hidden_dim, bias=False)  # gate (W_a)
+        self.w3 = nn.Linear(config.n_embd, self.hidden_dim, bias=False)  # content (W_b)
+        self.w2 = nn.Linear(self.hidden_dim, config.n_embd, bias=False)  # down-projection
+    def forward(self, x):
+        gate = self.w1(x)
+        gate = gate * torch.sigmoid(gate)
+        content = self.w3(x)
+        x = gate * content
+        x = self.w2(x)
+        return x
+    
+class Block(nn.Module):
+    def __init__(self, config: LLaMAConfig):
+        super().__init__()
+        self.ln1 = nn.LayerNorm(config.n_embd)
+        self.ln2 = nn.LayerNorm(config.n_embd)
+        self.attn = SelfAttention(config)
+        self.ff = FeedForward(config)
 
     def forward(self, x):
-        x = self.fc1(x)
-        x = torch.nn.functional.gelu(x)
-        x = self.fc2(x)
+        x = x + self.attn(self.ln1(x))
+        x = x + self.ff(self.ln2(x))
         return x
