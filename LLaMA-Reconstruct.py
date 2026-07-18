@@ -57,7 +57,9 @@ class SelfAttention(nn.Module):
             q = q.reshape(*q.shape[:-1], -1, 1, 2)
             k = k.reshape(*k.shape[:-1], -1, 1, 2)
             q = rope[..., 0] * q[..., 0] + rope[..., 1] * q[..., 1]
+            q.reshape(-2)
             k = rope[..., 0] * k[..., 0] + rope[..., 1] * k[..., 1]
+            k.reshape(-2)
 
         attn = torch.matmul(q, k.transpose(-2, -1)) / (self.head_dim ** 0.5)
         attn = attn.masked_fill(self.tril[:seq_length, :seq_length] == 0, float('-inf'))
@@ -109,13 +111,13 @@ class LLaMA(nn.Module):
         assert config.n_embd % config.n_head == 0, "Embedding dimension must be divisible by number of heads."
         self.head_dim = config.n_embd // config.n_head
         positions = torch.arange(config.block_size)
-        rope = SelfAttention.rope(positions, head_dim=self.head_dim)
+        rope = SelfAttention.rope(positions, self.head_dim)
         self.register_buffer("rope", rope)
 
     def forward(self, x):
         batch_size, seq_length = x.size()
         x = self.token_embedding(x)
-        rope_slice = self.rope[:seq_length, :seq_length]
+        rope_slice = self.rope[:seq_length]
 
         for block in self.blocks:
             x = block(x, rope_slice)
@@ -123,5 +125,3 @@ class LLaMA(nn.Module):
         x = self.ln_f(x)
         logits = self.head(x)
         return logits
-
-
